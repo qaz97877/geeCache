@@ -7,24 +7,27 @@ import (
 )
 
 // 用于加载数据的回调函数
-// geeCache不应该实现具体的加载方法，而是应该让用户决定如何加载
+// geeCache不应该实现具体的加载方法 而是应该让用户传入加载函数
 type Getter interface {
 	Get(key string) ([]byte, error)
 }
 
-// 一个具体的实现
+// 函数适配器
+// 因为普通的函数是不具有Get方法的 所以无法通过Getter(simpleFunc)这种形式强转
 type GetterFunc func(key string) ([]byte, error)
 
 func (f GetterFunc) Get(key string) ([]byte, error) {
 	return f(key)
 }
 
+// 一个集群节点的格式
 type Group struct {
 	name      string
 	getter    Getter
 	mainCache cache
 }
 
+// 全局变量
 var (
 	mu     sync.RWMutex
 	groups = make(map[string]*Group)
@@ -57,6 +60,7 @@ func (g *Group) Get(key string) (ByteView, error) {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
 
+	// 情况1：在当前的缓存中找到了key 直接返回data
 	if v, ok := g.mainCache.get(key); ok {
 		log.Println("[GeeCache] hit")
 		return v, nil
@@ -65,6 +69,9 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (val ByteView, err error) {
+	// 情况2：当前缓存中没有找到key 与远程节点交互 返回缓存值
+
+	// 情况3：在当前缓存中没找到key 使用Getter回调函数获取值并添加进缓存 最后返回data
 	return g.getLocally(key)
 }
 
